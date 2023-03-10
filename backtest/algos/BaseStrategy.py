@@ -19,6 +19,16 @@ class Strategy(bt.Strategy):
         self.buycomm = None
         self.order_rejected = False
         self.verbose = self.params.verbose
+        self.high_price = 1e7
+        self.inTradeDays = 0
+        self.num_trades = 0
+        self.profitable_trades = 0
+        self.profit = 0
+        self.loss = 0
+
+    def next(self):
+        self.numDays += 1
+        self.high_price = max(self.high_price,self.data.high)
 
     def log(self, txt, date=None):
         if self.verbose:
@@ -40,14 +50,28 @@ class Strategy(bt.Strategy):
                     order.executed.value,
                     order.executed.comm))
                 self.buyprice = order.executed.price
+                self.high_price = self.buyprice
                 self.buycomm = order.executed.comm
+                self.buyday = self.data.datetime.date(0)
             if order.issell():
-                self.log('SELL {}\t{:.2f}\t  Cost: {:.2f}\tComm: {:.2f}'.format(
+                self.log('Trade {}\t{:.2f}\t  Cost: {:.2f}\tComm: {:.2f}\tBuy: {:.2f}\tProfit: {:.2f}\tDays: {}'.format(
                     order.data._name,
                     order.executed.price,
                     order.executed.value,
-                    order.executed.comm))
-
+                    order.executed.comm,
+                    self.buyprice,
+                    (order.executed.price-self.buyprice)*abs(order.executed.size),
+                    (self.data.datetime.date(0)-self.buyday).days))
+                self.inTradeDays += (self.data.datetime.date(0)-self.buyday).days + 1
+                self.num_trades += 1
+                if order.executed.price > self.buyprice:
+                    self.profitable_trades += 1
+                    self.profit += (order.executed.price-self.buyprice)/self.buyprice
+                else:
+                    self.loss += (order.executed.price-self.buyprice)/self.buyprice
+                self.buyprice = -1
+                self.high_price = 1e7
+                
         elif order.status in [order.Canceled, order.Margin, order.Rejected]:
             status_reason = {
                 order.Canceled: 'Canceled',
@@ -59,8 +83,8 @@ class Strategy(bt.Strategy):
                 'BUY' if order.isbuy() else 'SELL',
                 order.data._name
             ))
-            self.log('Cash: {:.2f}, Order: {:.2f}'.format(self.broker.get_cash(),
-                                                          (order.price or 0) * (order.size or 0)))
+            # self.log('Cash: {:.2f}, Order: {:.2f}'.format(self.broker.get_cash(),
+            #                                               (order.price or 0) * (order.size or 0)))
             self.order_rejected = True
 
         # Write down: no pending order

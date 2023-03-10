@@ -29,6 +29,13 @@ def clean_tickers(tickers, start, end):
     return out_tickers
 
 
+def clean_division(a, b):
+    if b == 0:
+        return 0
+    else:
+        return round(a/b, 2)
+
+
 def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', cash=100000.0,
                  verbose=False, plot=False, plotreturns=False, universe=None, exclude=[],
                  kwargs=None):
@@ -50,7 +57,10 @@ def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', c
         stdstats=not plotreturns,
         cheat_on_open=strategy.params.cheat_on_open
     )
-
+    # comminfo = bt.commissions.CommInfo_Stocks_Perc(commission=5,
+    #                                                percabs=True)
+    # cerebro.broker.addcommissioninfo(comminfo,name='Zerodha')
+    cerebro.broker.setcommission(commission=0.00025)  # 0.5% of the operation value
     # Add a strategy
     cerebro.addstrategy(strategy, verbose=verbose)
 
@@ -108,7 +118,6 @@ def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', c
     avg_positions = np.mean([sum(d != 0.0 for d in i) for i in positions.values()])
     leverage = results[0].analyzers.grossleverage.get_analysis()
     avg_leverage = np.mean([abs(i) for i in leverage.values()])
-
     sharpe = 'None' if sharpe is None else round(sharpe, 5)
     print('ROI:\t\t{:.2f}%'.format(100.0 * ((end_value / start_value) - 1.0)))
     analyzer_results = []
@@ -118,8 +127,12 @@ def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', c
     analyzer_results.append('Sortino:\t{:.5f}'.format(sortino))
     analyzer_results.append('Positions:\t{:.5f}'.format(avg_positions))
     analyzer_results.append('Leverage:\t{:.5f}'.format(avg_leverage))
+    analyzer_results.append('In Trade Days:\t{:.2f}%'.format(round(clean_division(100.0*results[0].inTradeDays,results[0].numDays),2)))
+    analyzer_results.append(f'Trades: {results[0].num_trades} Profitable: {results[0].profitable_trades} Loosing: {results[0].num_trades-results[0].profitable_trades}')
+    analyzer_results.append(f'Avg Profit: {clean_division(100*results[0].profit,results[0].profitable_trades)}')
+    analyzer_results.append(f'Avg Loss: {clean_division(100*results[0].loss,results[0].num_trades-results[0].profitable_trades)}')
+    analyzer_results.append(f'Avg days in trade:{clean_division(results[0].inTradeDays, results[0].num_trades)}')
     print('\n'.join(analyzer_results))
-
     # Plot results
     if plot:
         cerebro.plot()
