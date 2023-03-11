@@ -6,7 +6,7 @@ import dateutil.parser
 
 import pandas as pd
 import numpy as np
-
+import re
 # Import the backtrader platform
 import backtrader as bt
 from backtrader import TimeFrame
@@ -38,7 +38,7 @@ def clean_division(a, b):
 
 def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', cash=100000.0,
                  verbose=False, plot=False, plotreturns=False, universe=None, exclude=[],
-                 kwargs=None):
+                 csv=False, kwargs=None):
     start_date = dateutil.parser.isoparse(start)
     end_date = dateutil.parser.isoparse(end)
 
@@ -102,13 +102,8 @@ def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', c
 
     # Run backtest
     results = cerebro.run(preload=False)
-
-    # Print results
     start_value = cash
-    end_value = cerebro.broker.getvalue()
-    print('Starting Portfolio Value:\t{:.2f}'.format(cash))
-    print('Final Portfolio Value:\t\t{:.2f}'.format(end_value))
-
+    end_value = cerebro.broker.getvalue()    
     # Get analysis results
     drawdown = results[0].analyzers.drawdown.get_analysis()['max']['drawdown']
     cagr = results[0].analyzers.returns.get_analysis()['rnorm100']
@@ -119,8 +114,10 @@ def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', c
     leverage = results[0].analyzers.grossleverage.get_analysis()
     avg_leverage = np.mean([abs(i) for i in leverage.values()])
     sharpe = 'None' if sharpe is None else round(sharpe, 5)
-    print('ROI:\t\t{:.2f}%'.format(100.0 * ((end_value / start_value) - 1.0)))
     analyzer_results = []
+    analyzer_results.append(f'Start cash:\t{start_value}')
+    analyzer_results.append(f'End cash:\t{round(end_value,2)}')
+    analyzer_results.append(f'ROI:\t\t{round(100*end_value / start_value -100.0,2)}')
     analyzer_results.append('Max Drawdown:\t{:.2f}'.format(drawdown))
     analyzer_results.append('CAGR:\t\t{:.2f}'.format(cagr))
     analyzer_results.append('Sharpe:\t\t{}'.format(sharpe))
@@ -128,11 +125,26 @@ def run_strategy(strategy, tickers=None, start='1900-01-01', end='2100-01-01', c
     analyzer_results.append('Positions:\t{:.5f}'.format(avg_positions))
     analyzer_results.append('Leverage:\t{:.5f}'.format(avg_leverage))
     analyzer_results.append('In Trade Days:\t{:.2f}%'.format(round(clean_division(100.0*results[0].inTradeDays,results[0].numDays),2)))
-    analyzer_results.append(f'Trades: {results[0].num_trades} Profitable: {results[0].profitable_trades} Loosing: {results[0].num_trades-results[0].profitable_trades}')
-    analyzer_results.append(f'Avg Profit: {clean_division(100*results[0].profit,results[0].profitable_trades)}')
-    analyzer_results.append(f'Avg Loss: {clean_division(100*results[0].loss,results[0].num_trades-results[0].profitable_trades)}')
-    analyzer_results.append(f'Avg days in trade:{clean_division(results[0].inTradeDays, results[0].num_trades)}')
-    print('\n'.join(analyzer_results))
+    analyzer_results.append(f'Trades:\t\t{results[0].num_trades}')
+    analyzer_results.append(f'TotDays:\t{results[0].numDays}')
+    analyzer_results.append(f'Profitable:\t{results[0].profitable_trades}')
+    analyzer_results.append(f'Loosing:\t{results[0].num_trades-results[0].profitable_trades}')
+    analyzer_results.append(f'Avg Profit:\t{clean_division(100*results[0].profit,results[0].profitable_trades)}')
+    analyzer_results.append(f'Avg Loss:\t{clean_division(100*results[0].loss,results[0].num_trades-results[0].profitable_trades)}')
+    analyzer_results.append(f'Avg days in trade:\t{clean_division(results[0].inTradeDays, results[0].num_trades)}')
+    if not csv:
+        # Print results
+        print('\n'.join(analyzer_results))
+    else:
+        ret = [','.join(tickers)]
+        header = ['ticker']
+        for r in analyzer_results:
+            x = r.split('\t')
+            key, val = x[0], x[-1]
+            ret.append(val)
+            header.append(key)
+        print(re.sub('[: ]','',','.join(header)))
+        print(','.join(ret))
     # Plot results
     if plot:
         cerebro.plot()
@@ -150,6 +162,7 @@ if __name__ == '__main__':
     PARSER.add_argument('-v', '--verbose', action='store_true')
     PARSER.add_argument('-p', '--plot', action='store_true')
     PARSER.add_argument('--plotreturns', action='store_true')
+    PARSER.add_argument('-c', '--csv', action='store_true')
     PARSER.add_argument('-k', '--kwargs', nargs='+')
     ARGS = PARSER.parse_args()
     ARG_ITEMS = vars(ARGS)
